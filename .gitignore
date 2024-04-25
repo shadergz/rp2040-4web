@@ -1,0 +1,5 @@
+cortexm0+/build
+wifi32/build
+wifi32/sdkconfig
+*compile_commands.json
+.idea
