@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdbool.h>
 #include <string.h>
 
 #include <nvs_flash.h>
@@ -7,6 +6,7 @@
 #include <esp_sleep.h>
 #include <esp_log.h>
 #include <pthread.h>
+
 bool wifi = false,
     started = false,
     connected = false,
@@ -23,7 +23,7 @@ extern void wifi_find_ap(uint16_t* cnt, bool* founded);
 void check_wifi() {
     static char mac[19] = {};
     pthread_mutex_lock(&wifim);
-    if (!configured && !wifi) {
+    if (!configured) {
         static uint16_t apid;
         wifi_find_ap(&apid, &configured);
 
@@ -31,7 +31,7 @@ void check_wifi() {
             esp_wifi_connect();
     }
     uint32_t slen = strlen((char*)router.ssid);
-    wifi = started && configured && connected;
+    wifi = started && configured && connected && strlen(ip);
 
     if (!wifi && configured) {
         memset(mac, 0, sizeof(mac));
@@ -49,15 +49,9 @@ void check_wifi() {
                 *maci++ = ':';
         }
     }
-    switch (ewifi) {
-    case ESP_OK:
-        if (strlen(mac) && wifi)
-            ESP_LOGI("host", "We are connected to (%s), MAC address %s, IP %s", router.ssid, mac, ip);
-        break;
-    case ESP_ERR_WIFI_SSID:
-        configured = connected = false;
-        break;
-    default:
+    if (wifi && ewifi == ESP_OK) {
+        ESP_LOGI("host", "We are connected to (%s), MAC address %s, IP %s", router.ssid, mac, ip);
+    } else {
         ESP_LOGE("host", "Connection issues due to: %s", esp_err_to_name(ewifi));
     }
     pthread_mutex_trylock(&wifim);
@@ -77,6 +71,7 @@ void app_main(void)
     wifi_on();
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MAX_MODEM));
     ESP_LOGI("host", "ESP32's WIFI module initialized");
+    // Due to the FreeRTOS task scheduler, we need to sleep for 1 second or more
     esp_sleep_enable_timer_wakeup(1000000);
 
     for (;;) {

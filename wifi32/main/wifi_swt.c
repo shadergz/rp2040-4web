@@ -12,60 +12,62 @@ wifi_config_t wlset = {
 wifi_ap_record_t router = {};
 char ip[16] = {};
 
-extern bool started;
-extern bool connected;
+extern bool started,
+    connected,
+    configured;
 extern esp_err_t ewifi;
 extern pthread_cond_t wifis;
 extern pthread_mutex_t wifim;
 
-const char* getevestr(int32_t e) {
+const char* getevestr(esp_event_base_t b, int32_t e) {
+    if (b == IP_EVENT) {
+        switch (e) {
+        case IP_EVENT_STA_GOT_IP:
+            return "station got IP from connected AP";
+        case IP_EVENT_STA_LOST_IP:
+            return "station lost IP and the IP is reset to 0";
+        }
+    }
     switch (e) {
+    case WIFI_EVENT_SCAN_DONE:
+        return "Finished scanning AP";
     case WIFI_EVENT_STA_START:
-        return "WIFI_EVENT_STA_START";
+        return "Station start";
     case WIFI_EVENT_STA_STOP:
-        return "WIFI_EVENT_STA_STOP";
+        return "Station stop";
     case WIFI_EVENT_STA_CONNECTED:
-        return "WIFI_EVENT_STA_CONNECTED";
+        return "Station connected to AP";
     case WIFI_EVENT_STA_DISCONNECTED:
-        return "WIFI_EVENT_STA_DISCONNECTED";
+        return "Station disconnected from AP";
     case WIFI_EVENT_STA_BEACON_TIMEOUT:
-        return "WIFI_EVENT_STA_BEACON_TIMEOUT";
+        return "Station beacon timeout";
     default:
         return NULL;
     }
 }
-
 static void wifi_eve(void* arg, esp_event_base_t base, int32_t eid, void* data) {
     ip_event_got_ip_t* ipd = data;
     pthread_mutex_lock(&wifim);
     switch (eid) {
-        case WIFI_EVENT_STA_START:
-        case WIFI_EVENT_STA_STOP:
-            started = !started;
-            break;
-        case WIFI_EVENT_STA_CONNECTED:
+        case WIFI_EVENT_STA_START: started = true; break;
+        case WIFI_EVENT_STA_STOP: started = false; break;
+        case WIFI_EVENT_STA_CONNECTED: connected = true; break;
         case WIFI_EVENT_STA_DISCONNECTED:
+            configured = connected = false; break;
         case WIFI_EVENT_STA_BEACON_TIMEOUT:
-            connected = !connected;
+            break;
     }
-    if (eid == WIFI_EVENT_STA_DISCONNECTED || eid == WIFI_EVENT_STA_BEACON_TIMEOUT)
-    if (eid == IP_EVENT_STA_GOT_IP && connected)
+
+    if (base == IP_EVENT && eid == IP_EVENT_STA_GOT_IP && connected)
         sprintf(ip, IPSTR, IP2STR(&ipd->ip_info.ip));
-
-    char eves[64] = {};
-    sprintf(eves, "%s:?", base == IP_EVENT ? "IP" : base == WIFI_EVENT ? "WIFI" : "");
-    if (getevestr(eid) != NULL)
-        sprintf(strchr(eves, '?'), "%s", getevestr(eid));
-    else
-        sprintf(strchr(eves, '?'), "%d", (int)eid);
-
-    ESP_LOGI("host", "Received WiFi event: %s, value (PTR): %p", eves, data);
-    if (eid == WIFI_EVENT_STA_CONNECTED || eid == WIFI_EVENT_STA_DISCONNECTED) {
-        if (connected)
-            ewifi = esp_wifi_sta_get_ap_info(&router);
-        else
-            memset(&router, 0, sizeof(router));
+    else if (base == IP_EVENT && eid == IP_EVENT_STA_LOST_IP)
+        memset(ip, 0, sizeof(ip));
+    ESP_LOGI("host", "Received WiFi event: %s", getevestr(base, eid));
+    if (connected) {
+        ewifi = esp_wifi_sta_get_ap_info(&router);
         pthread_cond_signal(&wifis);
+    } else {
+        memset(&router, 0, sizeof(router));
     }
     pthread_mutex_unlock(&wifim);
 }
