@@ -18,31 +18,48 @@ extern esp_err_t ewifi;
 extern pthread_cond_t wifis;
 extern pthread_mutex_t wifim;
 
+const char* getevestr(int32_t e) {
+    switch (e) {
+    case WIFI_EVENT_STA_START:
+        return "WIFI_EVENT_STA_START";
+    case WIFI_EVENT_STA_STOP:
+        return "WIFI_EVENT_STA_STOP";
+    case WIFI_EVENT_STA_CONNECTED:
+        return "WIFI_EVENT_STA_CONNECTED";
+    case WIFI_EVENT_STA_DISCONNECTED:
+        return "WIFI_EVENT_STA_DISCONNECTED";
+    case WIFI_EVENT_STA_BEACON_TIMEOUT:
+        return "WIFI_EVENT_STA_BEACON_TIMEOUT";
+    default:
+        return NULL;
+    }
+}
+
 static void wifi_eve(void* arg, esp_event_base_t base, int32_t eid, void* data) {
     ip_event_got_ip_t* ipd = data;
     pthread_mutex_lock(&wifim);
-    const char* event = NULL;
-
     switch (eid) {
         case WIFI_EVENT_STA_START:
-            started = true; event = "WIFI_EVENT_STA_START"; break;
         case WIFI_EVENT_STA_STOP:
-            started = false; event = "WIFI_EVENT_STA_STOP"; break;
+            started = !started;
+            break;
         case WIFI_EVENT_STA_CONNECTED:
-            connected = true; event = "WIFI_EVENT_STA_CONNECTED"; break;
         case WIFI_EVENT_STA_DISCONNECTED:
-            connected = false; event = "WIFI_EVENT_STA_DISCONNECTED"; break;
-        case IP_EVENT_STA_GOT_IP:
-            sprintf(ip, IPSTR, IP2STR(&ipd->ip_info.ip)); event = "IP_EVENT_STA_GOT_IP"; break;
+        case WIFI_EVENT_STA_BEACON_TIMEOUT:
+            connected = !connected;
     }
-    char eve[0x40] = {};
-    sprintf(eve, "%s:?", base == IP_EVENT ? "IP" : base == WIFI_EVENT ? "WIFI" : "");
-    if (event != NULL)
-        sprintf(strchr(eve, '?'), "%s", event);
-    else
-        sprintf(strchr(eve, '?'), "%d", (int)eid);
+    if (eid == WIFI_EVENT_STA_DISCONNECTED || eid == WIFI_EVENT_STA_BEACON_TIMEOUT)
+    if (eid == IP_EVENT_STA_GOT_IP && connected)
+        sprintf(ip, IPSTR, IP2STR(&ipd->ip_info.ip));
 
-    ESP_LOGI("host", "Received WiFi event: %s, value (PTR): %p", eve, data);
+    char eves[64] = {};
+    sprintf(eves, "%s:?", base == IP_EVENT ? "IP" : base == WIFI_EVENT ? "WIFI" : "");
+    if (getevestr(eid) != NULL)
+        sprintf(strchr(eves, '?'), "%s", getevestr(eid));
+    else
+        sprintf(strchr(eves, '?'), "%d", (int)eid);
+
+    ESP_LOGI("host", "Received WiFi event: %s, value (PTR): %p", eves, data);
     if (eid == WIFI_EVENT_STA_CONNECTED || eid == WIFI_EVENT_STA_DISCONNECTED) {
         if (connected)
             ewifi = esp_wifi_sta_get_ap_info(&router);
@@ -53,6 +70,39 @@ static void wifi_eve(void* arg, esp_event_base_t base, int32_t eid, void* data) 
     pthread_mutex_unlock(&wifim);
 }
 
+const char wifi_ssid[] = "Gabriel TI";
+const char wifi_pass[] = "1realdepao";
+void wifi_find_ap(uint16_t* cnt, bool* found) {
+    *cnt = 0;
+    do {
+        if (*found)
+            return;
+        esp_wifi_scan_start(NULL, true);
+        if (esp_wifi_scan_get_ap_num(cnt) != ESP_OK)
+            *cnt = 0;
+    } while (!*cnt);
+    ESP_LOGI("host", "The WiFi network scan found %u open access points", *cnt);
+
+    wifi_ap_record_t recp[0xa];
+    uint16_t recs = 0xa;
+    esp_wifi_scan_get_ap_records(&recs, recp);
+
+    for (uint16_t id = 0; id < recs && !*found; id++) {
+        const wifi_ap_record_t* ap = &recp[id];
+        if (strcmp((char*)&ap->ssid, wifi_ssid))
+            continue;
+        strcpy((char*)&wlset.sta.ssid, wifi_ssid);
+        strcpy((char*)&wlset.sta.password, wifi_pass);
+        *found = true;
+    }
+    if (!*found)
+        return;
+    ESP_LOGI("host", "Name of the chosen AP: %s", wlset.sta.ssid);
+    ESP_LOG_BUFFER_HEXDUMP("host", &wlset, sizeof(wlset), ESP_LOG_INFO);
+
+    esp_wifi_clear_ap_list();
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wlset));
+}
 void wifi_on() {
     ESP_ERROR_CHECK(esp_netif_init());
     esp_event_loop_create_default();

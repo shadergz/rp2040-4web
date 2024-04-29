@@ -7,7 +7,6 @@
 #include <esp_sleep.h>
 #include <esp_log.h>
 #include <pthread.h>
-
 bool wifi = false,
     started = false,
     connected = false,
@@ -45,14 +44,14 @@ void check_wifi() {
         char* maci = (char*)mac;
         for (uint8_t le = 0; le < 6; le++) {
             *maci++ = hex[(router.bssid[le] >> 4)];
-                *maci++ = hex[(router.bssid[le] & 0xf)];
+            *maci++ = hex[(router.bssid[le] & 0xf)];
             if (le != 5)
                 *maci++ = ':';
         }
     }
     switch (ewifi) {
     case ESP_OK:
-        if (strlen(mac))
+        if (strlen(mac) && wifi)
             ESP_LOGI("host", "We are connected to (%s), MAC address %s, IP %s", router.ssid, mac, ip);
         break;
     case ESP_ERR_WIFI_SSID:
@@ -78,12 +77,12 @@ void app_main(void)
     wifi_on();
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MAX_MODEM));
     ESP_LOGI("host", "ESP32's WIFI module initialized");
-    esp_sleep_enable_timer_wakeup(0.8 * 1000000);
+    esp_sleep_enable_timer_wakeup(1000000);
 
     for (;;) {
         check_wifi();
 
-        ESP_LOGI("host", "Going to sleep for 0.8 seconds");
+        ESP_LOGI("host", "Going to sleep for 1 seconds");
         esp_light_sleep_start();
     }
     pthread_cond_destroy(&wifis);
