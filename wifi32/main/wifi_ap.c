@@ -6,17 +6,15 @@
 const char wifi_ssid[] = "Gabriel TI";
 const char wifi_pass[] = "1realdepao";
 extern wifi_config_t wlset;
-extern bool wifi;
 
-void wifi_reconn(uint16_t* cnt, bool* found) {
+void wifi_find_ap(uint16_t* cnt, bool* found) {
     *cnt = 0;
     do {
         if (*found)
             return;
         esp_wifi_scan_start(NULL, true);
-        if (!wifi)
-            if (esp_wifi_scan_get_ap_num(cnt) != ESP_OK)
-                *cnt = 0;
+        if (esp_wifi_scan_get_ap_num(cnt) != ESP_OK)
+            *cnt = 0;
     } while (!*cnt);
     ESP_LOGI("host", "The WiFi network scan found %u open access points", *cnt);
 
