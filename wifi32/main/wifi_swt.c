@@ -72,33 +72,35 @@ static void wifi_eve(void* arg, esp_event_base_t base, int32_t eid, void* data) 
 
 const char wifi_ssid[] = "Gabriel TI";
 const char wifi_pass[] = "1realdepao";
-void wifi_find_ap(uint16_t* cnt, bool* isok) {
+void wifi_find_ap(uint16_t* cnt, bool* caught) {
     *cnt = 0;
+
+    bzero(&wlset.sta.ssid, 32);
+    bzero(&wlset.sta.password, 64);
+    esp_wifi_set_config(WIFI_IF_STA, &wlset);
     do {
-        if (*isok)
+        if (*caught)
             return;
         esp_wifi_scan_start(NULL, true);
         if (esp_wifi_scan_get_ap_num(cnt) != ESP_OK)
             *cnt = 0;
     } while (!*cnt);
     ESP_LOGI("host", "The WiFi network scan found %u open access points", *cnt);
-    memset(&wlset.sta.ssid, 0, sizeof(wlset.sta.ssid));
-    memset(&wlset.sta.password, 0, sizeof(wlset.sta.password));
 
     wifi_ap_record_t recp[0xa];
     uint16_t recs = 0xa > *cnt ? *cnt : 0xa;
     esp_wifi_scan_get_ap_records(&recs, recp);
-
-    for (uint16_t id = 0; id < recs && !*isok; id++) {
+    for (uint16_t id = 0; id < recs && !*caught; id++) {
         const wifi_ap_record_t* ap = &recp[id];
         if (strcmp((char*)&ap->ssid, wifi_ssid))
             continue;
         strcpy((char*)&wlset.sta.ssid, wifi_ssid);
         strcpy((char*)&wlset.sta.password, wifi_pass);
-        *isok = true;
+        *caught = true;
     }
-    if (!*isok)
+    if (!*caught)
         return;
+
     ESP_LOGI("host", "Name of the chosen AP: %s", wlset.sta.ssid);
     ESP_LOG_BUFFER_HEXDUMP("host", &wlset, sizeof(wlset), ESP_LOG_INFO);
 
