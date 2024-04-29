@@ -32,7 +32,6 @@ void check_wifi() {
     }
     uint32_t slen = strlen((char*)router.ssid);
     wifi = started && configured && connected && strlen(ip);
-
     if (!wifi && configured) {
         memset(mac, 0, sizeof(mac));
         ewifi = esp_wifi_connect();
@@ -49,11 +48,10 @@ void check_wifi() {
                 *maci++ = ':';
         }
     }
-    if (wifi && ewifi == ESP_OK) {
+    if (wifi)
         ESP_LOGI("host", "We are connected to (%s), MAC address %s, IP %s", router.ssid, mac, ip);
-    } else {
+    else if (ewifi != ESP_OK)
         ESP_LOGE("host", "Connection issues due to: %s", esp_err_to_name(ewifi));
-    }
     pthread_mutex_trylock(&wifim);
     pthread_mutex_unlock(&wifim);
 }
@@ -69,15 +67,15 @@ void app_main(void)
     pthread_mutex_init(&wifim, NULL);
 
     wifi_on();
-    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MAX_MODEM));
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     ESP_LOGI("host", "ESP32's WIFI module initialized");
     // Due to the FreeRTOS task scheduler, we need to sleep for 1 second or more
-    esp_sleep_enable_timer_wakeup(1000000);
+    esp_sleep_enable_timer_wakeup(1500000);
 
     for (;;) {
         check_wifi();
 
-        ESP_LOGI("host", "Going to sleep for 1 seconds");
+        ESP_LOGI("host", "Going to sleep for 1.5 seconds");
         esp_light_sleep_start();
     }
     pthread_cond_destroy(&wifis);

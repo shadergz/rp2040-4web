@@ -57,47 +57,47 @@ static void wifi_eve(void* arg, esp_event_base_t base, int32_t eid, void* data) 
         case WIFI_EVENT_STA_BEACON_TIMEOUT:
             break;
     }
-
     if (base == IP_EVENT && eid == IP_EVENT_STA_GOT_IP && connected)
         sprintf(ip, IPSTR, IP2STR(&ipd->ip_info.ip));
     else if (base == IP_EVENT && eid == IP_EVENT_STA_LOST_IP)
         memset(ip, 0, sizeof(ip));
     ESP_LOGI("host", "Received WiFi event: %s", getevestr(base, eid));
-    if (connected) {
+    if (connected)
         ewifi = esp_wifi_sta_get_ap_info(&router);
-        pthread_cond_signal(&wifis);
-    } else {
+    else
         memset(&router, 0, sizeof(router));
-    }
+    pthread_cond_signal(&wifis);
     pthread_mutex_unlock(&wifim);
 }
 
 const char wifi_ssid[] = "Gabriel TI";
 const char wifi_pass[] = "1realdepao";
-void wifi_find_ap(uint16_t* cnt, bool* found) {
+void wifi_find_ap(uint16_t* cnt, bool* isok) {
     *cnt = 0;
     do {
-        if (*found)
+        if (*isok)
             return;
         esp_wifi_scan_start(NULL, true);
         if (esp_wifi_scan_get_ap_num(cnt) != ESP_OK)
             *cnt = 0;
     } while (!*cnt);
     ESP_LOGI("host", "The WiFi network scan found %u open access points", *cnt);
+    memset(&wlset.sta.ssid, 0, sizeof(wlset.sta.ssid));
+    memset(&wlset.sta.password, 0, sizeof(wlset.sta.password));
 
     wifi_ap_record_t recp[0xa];
-    uint16_t recs = 0xa;
+    uint16_t recs = 0xa > *cnt ? *cnt : 0xa;
     esp_wifi_scan_get_ap_records(&recs, recp);
 
-    for (uint16_t id = 0; id < recs && !*found; id++) {
+    for (uint16_t id = 0; id < recs && !*isok; id++) {
         const wifi_ap_record_t* ap = &recp[id];
         if (strcmp((char*)&ap->ssid, wifi_ssid))
             continue;
         strcpy((char*)&wlset.sta.ssid, wifi_ssid);
         strcpy((char*)&wlset.sta.password, wifi_pass);
-        *found = true;
+        *isok = true;
     }
-    if (!*found)
+    if (!*isok)
         return;
     ESP_LOGI("host", "Name of the chosen AP: %s", wlset.sta.ssid);
     ESP_LOG_BUFFER_HEXDUMP("host", &wlset, sizeof(wlset), ESP_LOG_INFO);
